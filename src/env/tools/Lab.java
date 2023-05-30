@@ -425,4 +425,7 @@ public class Lab extends LearningEnvironment {
       z2BlindsUpValidAction.setApplicableOn(5, 0);
       z2BlindsDownValidAction.setApplicableOn(5, 1);
     }
+  public List<Integer> getFullCurrentState() {
+    return this.currentState;
+  }
 }

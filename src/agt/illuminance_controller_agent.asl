@@ -15,7 +15,7 @@ learning_lab_environment("https://raw.githubusercontent.com/Interactions-HSG/exa
 // the agent believes that the task that takes place in the 1st workstation requires an indoor illuminance
 // level of Rank 2, and the task that takes place in the 2nd workstation requires an indoor illumincance 
 // level of Rank 3. Modify the belief so that the agent can learn to handle different goals.
-task_requirements([2,3]).
+task_requirements([2,1]).
 
 /* Initial goals */
 !start. // the agent has the goal to start
@@ -33,18 +33,27 @@ task_requirements([2,3]).
   & task_requirements([Z1Level, Z2Level]) <-
 
   .print("Hello world");
-  .print("I want to achieve Z1Level=", Z1Level, " and Z2Level=",Z2Level);
+  .print("I want to achieve Z1Level=", Z1Level, " and Z2Level=", Z2Level);
 
   // creates a QLearner artifact for learning the lab Thing described by the W3C WoT TD located at URL
   makeArtifact("qlearner", "tools.QLearner", [Url], QLArtId);
+  .print("Created QLearner artifact with id ", QLArtId);
 
   // creates a ThingArtifact artifact for reading and acting on the state of the lab Thing
   makeArtifact("lab", "wot.ThingArtifact", [Url], LabArtId);
-  
+  .print("Created QLearner artifact with id ", LabArtId);
+
+  // Compute Q matrix for goal state
+  .print("Calculating Q matrix for goal state [", Z1Level, ",", Z2Level, "]");
+  focus(LabArtId);
+  focus(QLArtId);
+  calculateQ([Z1Level, Z2Level], 50, 0.5, 0.9, 0.1, 100)[artifact_id(QLArtId)];
+
   // example use of the getActionFromState operation of the QLearner artifact
   // relevant for Task 2.3
-  getActionFromState([1,1], [0, 0, false, false, false, false, 3], ActionTag, PayloadTags, Payload);
 
-  // example use of the invokeAction operation of the ThingArtifact 
-  //invokeAction(ActionTag, PayloadTags, Payload)
+  getActionFromState([Z1Level, Z2Level], .readState(LabArtId), ActionTag, PayloadTags, Payload);
+
+  // example use of the invokeAction operation of the ThingArtifact
+  invokeAction(ActionTag, PayloadTags, Payload)
   .

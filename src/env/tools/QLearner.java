@@ -2,6 +2,8 @@ package tools;
 
 import java.util.*;
 import java.util.logging.*;
+import java.util.stream.Collectors;
+
 import cartago.Artifact;
 import cartago.OPERATION;
 import cartago.OpFeedbackParam;
@@ -11,9 +13,10 @@ public class QLearner extends Artifact {
   private Lab lab; // the lab environment that will be learnt 
   private int stateCount; // the number of possible states in the lab environment
   private int actionCount; // the number of possible actions in the lab environment
-  private HashMap<Integer, double[][]> qTables; // a map for storing the qTables computed for different goals
+  private Map<String, double[][]> qTables = new HashMap<>();
 
-  private static final Logger LOGGER = Logger.getLogger(QLearner.class.getName());
+
+    private static final Logger LOGGER = Logger.getLogger(QLearner.class.getName());
 
   public void init(String environmentURL) {
 
@@ -52,19 +55,91 @@ public class QLearner extends Artifact {
 * @param epsilonObj the exploration probability [0,1]
 * @param rewardObj the reward assigned when reaching the goal state
 **/
+
   @OPERATION
   public void calculateQ(Object[] goalDescription , Object episodesObj, Object alphaObj, Object gammaObj, Object epsilonObj, Object rewardObj) {
-    
-    // ensure that the right datatypes are used
-    Integer episodes = Integer.valueOf(episodesObj.toString());
-    Double alpha = Double.valueOf(alphaObj.toString());
-    Double gamma = Double.valueOf(gammaObj.toString());
-    Double epsilon = Double.valueOf(epsilonObj.toString());
-    Integer reward = Integer.valueOf(rewardObj.toString());
-  
+
+      // ensure that the right datatypes are used
+      Integer episodes = Integer.valueOf(episodesObj.toString());
+      Double alpha = Double.valueOf(alphaObj.toString());
+      Double gamma = Double.valueOf(gammaObj.toString());
+      Double epsilon = Double.valueOf(epsilonObj.toString());
+      Integer reward = Integer.valueOf(rewardObj.toString());
+
+      // Create a new Q-table for this goal description if it doesn't already exist
+      Integer z1 = Integer.valueOf(goalDescription[0].toString());
+      Integer z2 = Integer.valueOf(goalDescription[1].toString());
+      String goalKey = z1.toString() + z2.toString();
+
+      if (!this.qTables.containsKey(goalKey)) {
+          this.qTables.put(goalKey, initializeQTable());
+      }
+
+      // Retrieve the Q-table for this goal description
+      double[][] qTable = this.qTables.get(goalKey);
+
+      // Perform Q-learning
+      Random random = new Random();
+      for (int episode = 0; episode < episodes; episode++) {
+          int currentState = this.lab.readCurrentState();
+
+          while (true) {
+              List<Integer> possibleActions = this.lab.getApplicableActions(currentState);
+              int action = random.nextDouble() < epsilon
+                      ? possibleActions.get(random.nextInt(possibleActions.size()))
+                      : getBestAction(currentState, qTable);
+
+              // Perform the action and get the reward
+              this.lab.performAction(action);
+              int nextState = this.lab.readCurrentState();
+              int rewardReceived = getReward(goalDescription, nextState);
+
+              // Update the Q-table
+              double oldValue = qTable[currentState][action];
+              double newValue = (1 - alpha) * oldValue + alpha * (rewardReceived + gamma * getMaxValue(qTable[nextState]));
+              qTable[currentState][action] = newValue;
+
+              // If we've reached the goal state, break out of the loop
+              if (rewardReceived == reward) {
+                  break;
+              }
+
+              // Update the current state
+              currentState = nextState;
+          }
+      }
   }
 
-/**
+    private int getBestAction(int state, double[][] qTable) {
+        List<Integer> possibleActions = this.lab.getApplicableActions(state);
+        int bestAction = possibleActions.get(0);
+        for (Integer action : possibleActions) {
+            if (qTable[state][action] > qTable[state][bestAction]) {
+                bestAction = action;
+            }
+        }
+        return bestAction;
+    }
+
+    private double getMaxValue(double[] values) {
+        double max = values[0];
+        for (double value : values) {
+            if (value > max) {
+                max = value;
+            }
+        }
+        return max;
+    }
+
+    private int getReward(Object[] goalDescription, int state) {
+        Integer z1 = Integer.valueOf(goalDescription[0].toString());
+        Integer z2 = Integer.valueOf(goalDescription[1].toString());
+        Integer[] currentStateDescription = this.lab.getFullCurrentState().toArray(new Integer[0]);
+        return (z1.equals(currentStateDescription[0]) && z2.equals(currentStateDescription[1])) ? 1 : 0;
+    }
+
+
+    /**
 * Returns information about the next best action based on a provided state and the QTable for
 * a goal description. The returned information can be used by agents to invoke an action 
 * using a ThingArtifact.
@@ -79,20 +154,33 @@ public class QLearner extends Artifact {
   public void getActionFromState(Object[] goalDescription, Object[] currentStateDescription,
       OpFeedbackParam<String> nextBestActionTag, OpFeedbackParam<Object[]> nextBestActionPayloadTags,
       OpFeedbackParam<Object[]> nextBestActionPayload) {
-         
-        // remove the following upon implementing Task 2.3!
 
-        // sets the semantic annotation of the next best action to be returned 
-        nextBestActionTag.set("http://example.org/was#SetZ1Light");
+      // Retrieve the Q-table for the given goal description
+      Integer z1 = Integer.valueOf(goalDescription[0].toString());
+      Integer z2 = Integer.valueOf(goalDescription[1].toString());
+      String goalKey = z1.toString() + z2.toString();
+      double[][] qTable = this.qTables.get(goalKey);
 
-        // sets the semantic annotation of the payload of the next best action to be returned 
-        Object payloadTags[] = { "Z1Light" };
-        nextBestActionPayloadTags.set(payloadTags);
+      // Convert the currentStateDescription to an array of integers
+      Integer[] currentState = Arrays.stream(currentStateDescription)
+              .map(Object::toString)
+              .map(Integer::valueOf)
+              .toArray(Integer[]::new);
 
-        // sets the payload of the next best action to be returned 
-        Object payload[] = { true };
-        nextBestActionPayload.set(payload);
-      }
+      // Get the next best action based on the current state and Q-table
+      int action = getBestAction(currentState[0], qTable);
+
+      // Set the next best action tag
+      nextBestActionTag.set("http://example.org/was#SetZ1Light");
+
+      // Set the next best action payload tags
+      Object[] payloadTags = {"Z1Light"};
+      nextBestActionPayloadTags.set(payloadTags);
+
+      // Set the next best action payload
+      Object[] payload = {action == 1};
+      nextBestActionPayload.set(payload);
+  }
 
     /**
     * Print the Q matrix

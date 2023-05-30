@@ -6,6 +6,10 @@ The simulator is programmed in [Node-Red](https://nodered.org/) environment. To 
 ### Steps
 1. Install Node-Red by following [this installation guide](https://nodered.org/docs/getting-started/local). 
 2. Start Node-Red:
+```
+docker run -it -p 1880:1880 --name mynodered nodered/node-red
+
+```
 
 ```
 node-red
